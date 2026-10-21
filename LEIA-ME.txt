@@ -1,0 +1,20 @@
+Estudos UEMA - projeto do app Android (WebView com o site de estudos)
+
+COMO GERAR O APK NO PC (Android Studio):
+1. Abra o Android Studio > File > Open > escolha esta pasta (EstudosUEMA).
+2. Espere o "Gradle sync" terminar (precisa de internet na 1a vez).
+3. Menu Build > Build Bundle(s) / APK(s) > Build APK(s).
+4. O APK fica em: app/build/outputs/apk/debug/app-debug.apk
+   (ou use Build > Generate Signed... se quiser assinar com sua chave).
+5. Passe o APK para o celular e instale (permita "instalar apps desconhecidos").
+
+COMO GERAR SEM PC (GitHub, pelo celular):
+1. Crie um repositório PRIVADO no github.com e envie o conteúdo desta pasta.
+2. Abra a aba "Actions" > "Gerar APK" > Run workflow.
+3. Quando terminar, baixe o artefato "EstudosUEMA-apk" (vem um .zip com o .apk).
+
+O site fica em app/src/main/assets/index.html. Para atualizar o app,
+troque esse arquivo pelo index.html novo e gere o APK de novo.
+A voz usa o leitor de texto do próprio Android (Google, português).
+Obs.: no app o progresso fica salvo no celular; a sincronização PC <-> celular
+continua funcionando pela página do Claude.
