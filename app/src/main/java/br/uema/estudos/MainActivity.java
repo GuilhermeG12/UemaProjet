@@ -282,13 +282,15 @@ public class MainActivity extends Activity {
         String[] itens = {
                 "Recarregar",
                 "Abrir no navegador",
-                offline ? "Tentar online (sincronizar)" : "Usar versão offline"
+                offline ? "Tentar online (sincronizar)" : "Usar versão offline",
+                "Transcrever vídeo do YouTube"
         };
         new AlertDialog.Builder(this)
                 .setTitle("Estudos UEMA")
                 .setItems(itens, new DialogInterface.OnClickListener() {
                     @Override public void onClick(DialogInterface d, int qual) {
                         if (qual == 1) { abrirFora(Uri.parse(ONLINE_URL)); return; }
+                        if (qual == 3) { startActivity(new Intent(MainActivity.this, TranscreverActivity.class)); return; }
                         fecharPopup();
                         if (qual == 0 && !offline) web.reload();
                         else if (offline) abrirOnline();
