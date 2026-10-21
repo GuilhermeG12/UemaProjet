@@ -2153,5 +2153,113 @@ if(/^https?:$/.test(location.protocol)){
 }
 </script>
 
+<style>
+/* visualizador de imagem: toque/clique abre, pinça/rodinha/duplo clique dá zoom */
+.aimgs img{cursor:zoom-in}
+.lbx{position:fixed; inset:0; z-index:50; background:rgba(3,9,22,.94); display:flex; align-items:center; justify-content:center; overflow:hidden; touch-action:none; animation:fade .2s ease both}
+.lbx img{max-width:100%; max-height:100%; object-fit:contain; background:#fff; transform-origin:0 0; user-select:none; -webkit-user-drag:none; will-change:transform}
+.lbx .lbx-x{position:absolute; top:calc(12px + env(safe-area-inset-top, 0px)); right:12px; width:46px; height:46px; border-radius:50%; border:1px solid rgba(255,255,255,.35); background:rgba(16,36,74,.85); color:#fff; font-size:22px; line-height:1; display:grid; place-items:center; z-index:2}
+.lbx .lbx-dica{position:absolute; left:50%; transform:translateX(-50%); bottom:calc(14px + env(safe-area-inset-bottom, 0px)); font-size:12.5px; color:#dbe5fa; background:rgba(16,36,74,.85); padding:5px 12px; border-radius:99px; white-space:nowrap; pointer-events:none}
+</style>
+<script>
+/* ================= visualizador de imagem (zoom) ================= */
+(() => {
+  let box = null, img = null, s = 1, x = 0, y = 0, base = null, pts = new Map(), gesto = null, ultimoToque = 0, comHistorico = false, tipo = 'mouse';
+  const aplicar = () => { img.style.transform = `translate(${x}px, ${y}px) scale(${s})`; };
+  const limitar = () => {
+    s = Math.min(6, Math.max(1, s));
+    if(s === 1){ x = 0; y = 0; return; }
+    const w = base.width * s, h = base.height * s, W = innerWidth, H = innerHeight;
+    const minX = Math.min(0, W - w) - base.left, maxX = Math.max(0, W - w) - base.left;
+    const minY = Math.min(0, H - h) - base.top, maxY = Math.max(0, H - h) - base.top;
+    x = w <= W ? (W - w) / 2 - base.left : Math.min(maxX, Math.max(minX, x));
+    y = h <= H ? (H - h) / 2 - base.top : Math.min(maxY, Math.max(minY, y));
+  };
+  // zoom mantendo fixo o ponto (cx, cy) da tela
+  const zoomEm = (novo, cx, cy) => {
+    const px = (cx - base.left - x) / s, py = (cy - base.top - y) / s;
+    s = Math.min(6, Math.max(1, novo));
+    x = cx - base.left - px * s; y = cy - base.top - py * s;
+    limitar(); aplicar();
+  };
+  const alternar = (cx, cy) => { img.style.transition = 'transform .2s ease'; zoomEm(s > 1.05 ? 1 : 2.5, cx, cy); setTimeout(() => img && (img.style.transition = ''), 220); };
+  function fechar(doHistorico){
+    if(!box) return;
+    box.remove(); box = img = null; pts.clear(); gesto = null;
+    document.removeEventListener('keydown', tecla);
+    if(comHistorico && !doHistorico){ comHistorico = false; try{ history.back(); }catch(e){} }
+    comHistorico = false;
+  }
+  const tecla = e => { if(e.key === 'Escape') fechar(); };
+  function abrir(src, alt){
+    fechar();
+    box = document.createElement('div'); box.className = 'lbx'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'Imagem ampliada');
+    box.innerHTML = '<button class="lbx-x" aria-label="Fechar">✕</button><span class="lbx-dica">pinça ou duplo toque para ampliar</span>';
+    img = new Image(); img.src = src; img.alt = alt || ''; img.draggable = false;
+    box.appendChild(img); document.body.appendChild(box);
+    s = 1; x = 0; y = 0; aplicar();
+    const medir = () => { if(!img) return; img.style.transform = 'none'; base = img.getBoundingClientRect(); x = 0; y = 0; aplicar(); };
+    img.complete ? medir() : img.addEventListener('load', medir);
+    box.querySelector('.lbx-x').onclick = e => { e.stopPropagation(); fechar(); };
+    box.addEventListener('pointerdown', baixo);
+    box.addEventListener('pointermove', move);
+    box.addEventListener('pointerup', cima); box.addEventListener('pointercancel', cima);
+    box.addEventListener('wheel', e => { e.preventDefault(); zoomEm(s * Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); }, { passive:false });
+    box.addEventListener('dblclick', e => { if(e.target === img && tipo === 'mouse') alternar(e.clientX, e.clientY); });
+    document.addEventListener('keydown', tecla);
+    // botão voltar do celular fecha a imagem
+    try{ history.pushState({ lbx:1 }, ''); comHistorico = true; }catch(e){ comHistorico = false; }
+  }
+  addEventListener('popstate', () => { if(box) fechar(true); });
+  function baixo(e){
+    if(e.target.closest('.lbx-x')) return;
+    tipo = e.pointerType;
+    pts.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    if(pts.size === 2){
+      const [a, b] = [...pts.values()];
+      gesto = { tipo:'pinca', d:Math.hypot(a.x - b.x, a.y - b.y), s0:s };
+    } else if(pts.size === 1){
+      gesto = { tipo:'arrasto', sx:e.clientX, sy:e.clientY, x0:x, y0:y, moveu:false, alvo:e.target };
+    }
+  }
+  function move(e){
+    if(!pts.has(e.pointerId) || !gesto) return;
+    pts.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    if(gesto.tipo === 'pinca' && pts.size >= 2){
+      const [a, b] = [...pts.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if(gesto.d > 0) zoomEm(gesto.s0 * d / gesto.d, (a.x + b.x) / 2, (a.y + b.y) / 2);
+    } else if(gesto.tipo === 'arrasto'){
+      const dx = e.clientX - gesto.sx, dy = e.clientY - gesto.sy;
+      if(Math.abs(dx) + Math.abs(dy) > 6) gesto.moveu = true;
+      if(s > 1){ x = gesto.x0 + dx; y = gesto.y0 + dy; limitar(); aplicar(); }
+    }
+  }
+  function cima(e){
+    if(!pts.has(e.pointerId)) return;
+    pts.delete(e.pointerId);
+    if(gesto && gesto.tipo === 'arrasto' && !gesto.moveu && pts.size === 0){
+      if(e.pointerType !== 'mouse' && gesto.alvo === img){
+        const agora = Date.now();
+        if(agora - ultimoToque < 320){ ultimoToque = 0; alternar(e.clientX, e.clientY); }
+        else ultimoToque = agora;
+      } else if(gesto.alvo === box) fechar();   // toque fora da imagem fecha
+    }
+    if(pts.size === 1){
+      const p = [...pts.values()][0];
+      gesto = { tipo:'arrasto', sx:p.x, sy:p.y, x0:x, y0:y, moveu:true, alvo:null };
+    } else if(pts.size === 0) gesto = null;
+  }
+  addEventListener('resize', () => { if(img){ s = 1; img.style.transform = 'none'; base = img.getBoundingClientRect(); x = y = 0; aplicar(); } });
+  document.addEventListener('click', e => {
+    const im = e.target.closest && e.target.closest('.aimgs img');
+    if(!im || im.closest('.lbx')) return;
+    e.preventDefault(); e.stopPropagation();
+    abrir(im.currentSrc || im.src, im.alt);
+  }, true);
+  /* app Android: fim da fala repassado pelo app quando a página roda dentro do iframe do Claude */
+  addEventListener('message', e => { if(e.data && e.data.type === '__ttsDone' && window.__ttsDone) window.__ttsDone(e.data.id); });
+})();
+</script>
 </body>
 </html>
