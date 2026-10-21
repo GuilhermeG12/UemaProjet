@@ -29,7 +29,8 @@ import android.widget.Toast;
 public class TranscreverActivity extends Activity {
     private static final String FUNDO = "#081428";
     private EditText link;
-    private Button transcrever;
+    private Button transcrever, enviar;
+    private Transcritor.Resultado ultimo;
     private ProgressBar carregando;
     private TextView status, titulo, texto;
     private LinearLayout acoes;
@@ -90,6 +91,15 @@ public class TranscreverActivity extends Activity {
         titulo.setTextColor(Color.parseColor("#FFC23D"));
         titulo.setPadding(0, dp(14), 0, dp(4));
         col.addView(titulo);
+
+        enviar = botao("Enviar para o Claude", "#1F9E57");
+        enviar.setVisibility(View.GONE);
+        enviar.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { enviarParaClaude(); }
+        });
+        LinearLayout.LayoutParams pe = larguraToda();
+        pe.topMargin = dp(8);
+        col.addView(enviar, pe);
 
         acoes = new LinearLayout(this);
         acoes.setOrientation(LinearLayout.HORIZONTAL);
@@ -155,6 +165,8 @@ public class TranscreverActivity extends Activity {
         titulo.setText("");
         texto.setText("");
         acoes.setVisibility(View.GONE);
+        enviar.setVisibility(View.GONE);
+        ultimo = null;
         new Thread(new Runnable() {
             @Override public void run() {
                 try {
@@ -177,6 +189,24 @@ public class TranscreverActivity extends Activity {
         resultado = (r.titulo.isEmpty() ? "" : "Vídeo: " + r.titulo + "\n") + "Link: " + link.getText().toString().trim()
                 + "\nLegenda: " + r.idioma + "\n\n" + r.texto;
         acoes.setVisibility(View.VISIBLE);
+        enviar.setVisibility(View.VISIBLE);
+        ultimo = r;
+    }
+
+    /** Guarda a transcrição e abre a página do Claude, que salva no banco dela (o Claude lê de lá). */
+    private void enviarParaClaude() {
+        if (ultimo == null) return;
+        try {
+            Pendente.salvar(this, link.getText().toString().trim(), ultimo);
+        } catch (Exception e) {
+            status.setText("Não deu para guardar a transcrição: " + e.getMessage());
+            return;
+        }
+        Intent i = new Intent(this, MainActivity.class);
+        i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(i);
+        Toast.makeText(this, "Enviando para a página do Claude…", Toast.LENGTH_SHORT).show();
+        finish();
     }
 
     private void erro(Exception e) {

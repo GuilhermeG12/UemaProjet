@@ -2296,5 +2296,36 @@ if(/^https?:$/.test(location.protocol)){
   });
 })();
 </script>
+<script>
+/* ================= transcrições de vídeo feitas no app Android → banco da página (o Claude lê) ================= */
+(() => {
+  const APP = window.AndroidApp || null; if(!APP) return;
+  let db = null, ocupado = false;
+  async function entregar(){
+    if(ocupado || !db) return;
+    let p = ''; try{ p = APP.pendente(); }catch(e){ return; }
+    if(!p) return;
+    ocupado = true;
+    try{
+      const t = JSON.parse(p);
+      await db.collection('transcricoes').add({
+        link:String(t.link || ''), videoId:String(t.id || ''), titulo:String(t.titulo || ''),
+        idioma:String(t.idioma || ''), texto:String(t.texto || ''), criadoEm:Date.now()
+      });
+      APP.entregue(true);
+      toast('Transcrição enviada para o Claude ✓ Agora é só avisar na conversa.');
+    }catch(e){
+      toast('Não deu para enviar a transcrição. Confira se está logado no Claude e tente de novo.');
+    }finally{ ocupado = false; }
+  }
+  (async () => {
+    const c = window.claude; if(!c || typeof c.use !== 'function') return;
+    try{ db = await c.use('db'); }catch(e){ db = null; }
+    entregar();
+  })();
+  addEventListener('message', e => { if(e.data && e.data.type === '__transcricao') entregar(); });
+  document.addEventListener('visibilitychange', () => { if(!document.hidden) entregar(); });
+})();
+</script>
 </body>
 </html>

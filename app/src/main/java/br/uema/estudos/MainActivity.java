@@ -79,6 +79,7 @@ public class MainActivity extends Activity {
 
         web = novaWebView();
         web.addJavascriptInterface(new Voz(), "AndroidTTS");
+        web.addJavascriptInterface(new App(), "AndroidApp");
         web.setWebViewClient(new Cliente());
         web.setWebChromeClient(new Janelas());
         raiz.addView(web, cheio());
@@ -305,13 +306,37 @@ public class MainActivity extends Activity {
      * para todos os iframes (o artefato do Claude roda dentro de um iframe).
      */
     private void avisarFim(String id) {
-        final String js = "(function(id){try{window.__ttsDone&&window.__ttsDone(id)}catch(e){}"
+        String limpo = id.replaceAll("[^A-Za-z0-9_-]", "");
+        postarParaFrames("try{window.__ttsDone&&window.__ttsDone('" + limpo + "')}catch(e){}",
+                "{type:'__ttsDone',id:'" + limpo + "'}");
+    }
+
+    /** Avisa a página que há uma transcrição esperando para ser salva no banco da página. */
+    private void avisarTranscricao() {
+        if (Pendente.ler(this).isEmpty()) return;
+        postarParaFrames("", "{type:'__transcricao'}");
+    }
+
+    /** Roda `js` na página e manda `mensagem` por postMessage para todos os iframes. */
+    private void postarParaFrames(String js, String mensagem) {
+        final String tudo = "(function(){" + js
                 + "function w(f){for(var i=0;i<f.frames.length;i++){var c=f.frames[i];"
-                + "try{c.postMessage({type:'__ttsDone',id:id},'*')}catch(e){}try{w(c)}catch(e){}}}"
-                + "w(window)})('" + id.replaceAll("[^A-Za-z0-9_-]", "") + "')";
+                + "try{c.postMessage(" + mensagem + ",'*')}catch(e){}try{w(c)}catch(e){}}}"
+                + "w(window)})()";
         runOnUiThread(new Runnable() {
-            @Override public void run() { web.evaluateJavascript(js, null); }
+            @Override public void run() { if (web != null) web.evaluateJavascript(tudo, null); }
         });
+    }
+
+    /** Ponte para a página entregar ao Claude a transcrição feita no app: AndroidApp.pendente() / entregue(ok). */
+    public class App {
+        @JavascriptInterface
+        public String pendente() { return Pendente.ler(MainActivity.this); }
+
+        @JavascriptInterface
+        public void entregue(boolean ok) {
+            if (ok) Pendente.limpar(MainActivity.this);
+        }
     }
 
     /** Ponte de voz chamada pelo site: AndroidTTS.speak(id, texto, velocidade) e AndroidTTS.stop(). */
@@ -351,6 +376,19 @@ public class MainActivity extends Activity {
         } else {
             super.onBackPressed();
         }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        avisarTranscricao();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        avisarTranscricao();
     }
 
     @Override
